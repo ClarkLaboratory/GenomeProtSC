@@ -1,231 +1,315 @@
+library(Seurat)
+library(Matrix)
+library(dplyr)
+library(data.table)
+library(tibble)
+library(ggplot2)
 
+get_stats_msg <- function(seurat_obj) {
+  # Get the number of cells
+  num_cells <- ncol(seurat_obj)
 
-# define visualisation function
-plot_gene <- function(gene_symbol, tx_res, pep_res, orf_res, txcounts=NA, pepcounts=NA, min_intron_len=500) {
-  
-  # gene_symbol <- "Rsrc1"
-  # tx_res <- res_tx_import
-  # pep_res <- res_pep_import
-  # orf_res <- res_ORF_import
-  # min_intron_len <- 500
-  
-  # check selected gene id
-  if (startsWith(gene_symbol, "ENSG")) { # if esng id
-    ensg_id <- gene_symbol
-    tx_res <- tx_res %>% 
-      dplyr::filter(!is.na(gene_id), gene_id == gene_symbol)
-  } else if (startsWith(gene_symbol, "Bambu")) { # if bambu gene
-    ensg_id <- gene_symbol
-    tx_res <- tx_res %>% 
-      dplyr::filter(!is.na(gene_id), gene_id == gene_symbol)
-  } else { # gene name 
-    tx_res <- tx_res %>% 
-      dplyr::filter(!is.na(gene_name), gene_name == gene_symbol)
-    ensg_id <- tx_res$gene_id[1]
-  }
-  
-  # --- filter transcripts gtf for selected gene --- #
-  tx_res <- tx_res %>% 
-    mutate(feature_type = "Transcripts",
-           peptide_type = "Transcripts",
-           ORF_id = NA) %>% 
-    dplyr::select(seqnames,start,end,strand,type,gene_id,transcript_id,feature_type,peptide_type,exon_number,ORF_id)
-  
-  # --- #
-  
-  # --- filter peptides gtf for selected gene --- #
-  pep_res$transcript_id <- pep_res$peptide
-  
-  pep_res <- pep_res %>% 
-    dplyr::filter(!is.na(gene_id), gene_id == ensg_id) %>% 
-    separate(naming, into="tx_id", sep="_")
-  
-  pep_res <- pep_res %>% 
-    mutate(feature_type = "Peptides",
-           peptide_type = peptide_ids_orf) %>% 
-    group_by(transcript_id) %>% 
-    mutate(ORF_id = case_when(
-      exon_number == 1 ~ PID,
-      TRUE ~ NA)) %>% 
-    ungroup() %>% 
-    separate(ORF_id, into="ORF_id", sep="\\|") %>% 
-    dplyr::select(seqnames,start,end,strand,type,gene_id,transcript_id,tx_id,feature_type,peptide_type,exon_number,ORF_id,peptide_ids_orf,orf_identified)
-  
-  # --- #
-  
-  # --- filter orfs gtf for selected gene --- #
-  orf_res$ORF_id <- NULL
-  orf_res <- orf_res %>% 
-    dplyr::filter(transcript_id %in% pep_res$tx_id) %>% 
-    mutate(type = "CDS",
-           feature_type = "Transcripts",
-           gene_id = ensg_id,
-           peptide_type = "Transcripts") %>% 
-    group_by(transcript_id) %>% 
-    mutate(ORF_id = case_when(
-      as.numeric(exon_number) == 1 ~ paste0(PID),
-      TRUE ~ NA)) %>% 
-    ungroup() %>% 
-    separate(ORF_id, into="ORF_id", sep="\\|") %>%
-    separate(ORF_id, into="ORF_id", sep="\\_EN") %>%
-    separate(ORF_id, into="ORF_id", sep="\\_Bambu") %>%
-    separate(ORF_id, into="ORF_id", sep="\\_denovo") %>%
-    dplyr::select(seqnames,start,end,strand,type,gene_id,transcript_id,feature_type,peptide_type,exon_number,ORF_id,orf_identified)
-  
-  # --- #
-  
-  # extract exons from transcripts gtf and filter for transcript ids in the peptides result
-  gtf_exons <- tx_res %>% 
-    dplyr::filter(type == "exon" & transcript_id %in% pep_res$tx_id)
-  
-  # remove columns
-  pep_res$tx_id <- NULL
-  orf_res$peptide_ids_orf <- NA
-  gtf_exons$peptide_ids_orf <- NA
-  gtf_exons$orf_identified <- NA
-  
-  # combine peptides, transcripts and ORFs
-  gtf_to_plot <- rbind(pep_res, orf_res, gtf_exons)
-  
-  # factor and set levels
-  gtf_to_plot$feature_type <- factor(gtf_to_plot$feature_type, levels=c('Peptides', 'Transcripts'))
-  gtf_to_plot$peptide_type <- factor(gtf_to_plot$peptide_type, levels=c(FALSE, TRUE, 'Transcripts'))
-  
-  # add a '*' label when a peptide is uniquely mapped
-  gtf_to_plot <- gtf_to_plot %>% 
-    arrange(peptide_type) %>% 
-    mutate(ORF_id = case_when(
-      feature_type == "Transcripts" ~ ORF_id,
-      feature_type == "Peptides" & peptide_type == TRUE & exon_number == 1 & orf_identified == TRUE ~ ORF_id,
-      feature_type == "Peptides" & peptide_type != "high" & exon_number != 1 ~ NA
-    ))
-  
-  # separate out peptides
-  pep_gtf_to_plot <- gtf_to_plot %>% 
-    dplyr::filter(feature_type == "Peptides")
-  # remove duplicate rows
-  pep_gtf_to_plot <- pep_gtf_to_plot[!(base::duplicated(pep_gtf_to_plot)),]
-  
-  # separate out transcripts 
-  tx_gtf_to_plot <- gtf_to_plot %>% 
-    dplyr::filter(feature_type == "Transcripts")
-  
-  # define CDS as the detected ORFs
-  gtf_cds <- tx_gtf_to_plot %>% 
-    dplyr::filter(type == "CDS") %>% 
-    mutate(ORF_id = NA)
-  
-  # vectors of number of unique transcripts and peptides to set the plot panel heights
-  n_tx <- length(unique(tx_res$transcript_id))
-  n_pep <- length(unique(pep_res$transcript_id))
-  
-  # before plotting, check whether coutns files were uploaded 
-  if (missing(txcounts) & missing(pepcounts)) {
-    
-    # if no counts files, skip
-    
-  } else {
-    
-    # add quantitative heatmap info
-    
-    # filter transcript counts for gene of interest
-    txcounts <- txcounts %>%
-      dplyr::filter(transcript_id %in% tx_gtf_to_plot$transcript_id)
-    
-    # filter peptide counts for gene of interest
-    pepcounts <- pepcounts %>%
-      dplyr::filter(peptide %in% pep_gtf_to_plot$transcript_id)
-    
-    # filter transcripts for those with counts
-    tx_gtf_to_plot <- tx_gtf_to_plot %>% 
-      dplyr::filter(transcript_id %in% txcounts$transcript_id)
-    
-    # filter peptides for those with counts
-    pep_gtf_to_plot <- pep_gtf_to_plot %>% 
-      dplyr::filter(transcript_id %in% pepcounts$peptide)
-    
-  }
-  
-  # plot peptide and transcript tracks
-  gtf_tx_output <- tx_gtf_to_plot %>% 
-    ggplot(aes(xstart = start, xend = end, y = transcript_id)) +
-    geom_intron(data = to_intron(tx_gtf_to_plot, "transcript_id"),
-                aes(strand = strand), arrow.min.intron.length = min_intron_len) +
-    geom_range(aes(fill = peptide_type), show.legend = FALSE, height = 0.5) +
-    geom_range(data = gtf_cds, height = 0.75, fill = "#295D9B") +
-    ylab("") +
-    xlab(paste0(unique(tx_gtf_to_plot$seqnames), " ", gene_symbol)) +
-    theme_bw() +
-    theme(strip.background = element_blank(),
-          strip.text.y = element_blank()) +
-    scale_fill_manual(values = c("FALSE" = "#D3D3D3", "TRUE" = "orangered2", "Transcripts" = "#9FC9FB")) +
-    geom_text_repel(aes(x = start, label = ORF_id), size = 3, nudge_y = 0.5, min.segment.length = Inf)
-  
-  # set x axis so it is consistent between heatmaps
-  xlimits <- c(layer_scales(gtf_tx_output)$x$range$range)
-  
-  # plot peptide track
-  gtf_pep_output <- pep_gtf_to_plot %>% 
-    ggplot(aes(xstart = start, xend = end, y = transcript_id)) +
-    geom_intron(data = to_intron(pep_gtf_to_plot, "transcript_id"),
-                aes(strand = strand), arrow.min.intron.length = min_intron_len) +
-    geom_range(aes(fill = peptide_type), show.legend = FALSE, height = 0.5) +
-    ylab("") +
-    xlab("") +
-    xlim(xlimits) +
-    theme_bw() +
-    theme(strip.background = element_blank(),
-          strip.text.y = element_blank(),
-          axis.text.x = element_blank(),
-          axis.ticks.x = element_blank()) +
-    scale_fill_manual(values = c("FALSE" = "#D3D3D3", "TRUE" = "orangered2", "Transcripts" = "#9FC9FB")) +
-    geom_text_repel(aes(x = start, label = ORF_id), size = 3, nudge_y = 0.5, min.segment.length = Inf)
-  
-  # return peptide and transcript tracks if no quant data is provided
-  if (missing(txcounts) & missing(pepcounts)) {
-    
-    pep_vis_plot <- gtf_pep_output + gtf_tx_output + 
-      plot_layout(nrow = 2, ncol = 1, heights = c(n_pep, n_tx))
-    
-  } else {
-    
-    # plot peptide heatmap
-    pepcounts_output <- pepcounts %>%
-      ggplot(aes(x = sample_id, y = peptide, fill = count)) +
-      geom_tile() +
-      scale_fill_viridis_b(n.breaks = 8, option = "D") +
-      labs(x = "", y = "", fill = "VSN Intensity") +
-      theme_bw() +
-      scale_x_discrete(limits = levels(pepcounts$sample_id)) +
-      theme(strip.background = element_rect(color = "black", fill = "white", size = 0, linetype = "solid"),
-            axis.title.x = element_blank(),
-            axis.title.y = element_blank(),
-            #axis.text.x = element_blank(),
-            #axis.ticks.x = element_blank(),
-            axis.text.y = element_blank(),
-            axis.ticks.y = element_blank(),
-            legend.text = element_text(size=6))
-    
-    # plot transcript heatmap
-    txcounts_output <- txcounts %>%
-      ggplot(aes(x = sample_id, y = transcript_id, fill = log2(count+1))) +
-      geom_tile() +
-      scale_fill_viridis_b(n.breaks = 8, option = "D") +
-      labs(x = "Sample", y = "", fill = "log2(count+1)") +
-      theme_bw() +
-      scale_x_discrete(limits = levels(txcounts$sample_id)) +
-      theme(strip.background = element_rect(color = "black", fill = "white", size = 0, linetype = "solid"),
-            axis.text.y = element_blank(),
-            axis.ticks.y = element_blank(),
-            legend.text = element_text(size=6))
-    
-    pep_vis_plot <- gtf_pep_output + pepcounts_output + gtf_tx_output + txcounts_output + 
-      plot_layout(nrow = 2, ncol = 2, widths = c(1.5, 1), heights = c(n_pep, n_tx))
-    
-  }
-  
-  # display plot
-  return(pep_vis_plot)
-  
+  # Get statistics about the number of molecules detected per cell
+  nCount_RNA <- seurat_obj$nCount_RNA
+  min_nCount_RNA <- min(nCount_RNA)
+  max_nCount_RNA <- max(nCount_RNA)
+  median_nCount_RNA <- median(nCount_RNA)
+  stdev_nCount_RNA <- sd(nCount_RNA)
+
+  # Get statistics about the number of genes detected per cell
+  nFeature_RNA <- seurat_obj$nFeature_RNA
+  min_nFeature_RNA <- min(nFeature_RNA)
+  max_nFeature_RNA <- max(nFeature_RNA)
+  median_nFeature_RNA <- median(nFeature_RNA)
+  stdev_nFeature_RNA <- sd(nFeature_RNA)
+
+  # Get statistics about mitochondrial genes expressed per cell
+  percent_mt <- PercentageFeatureSet(seurat_obj, pattern = "^MT-")
+  min_percent_mt <- min(percent_mt)
+  max_percent_mt <- max(percent_mt)
+  median_percent_mt <- median(percent_mt)
+  stdev_percent_mt <- sd(percent_mt)
+
+  msg <- paste0("Number of cells: ", num_cells, "\n",
+                "\n",
+                "Number of molecules detected per cell (nCount_RNA):\n",
+                "Min: ", min_nCount_RNA, "\n",
+                "Max: ", max_nCount_RNA, "\n",
+                "Median: ", median_nCount_RNA, "\n",
+                "Stdev: ", stdev_nCount_RNA, "\n",
+                "\n",
+                "Number of genes detected per cell (nFeature_RNA):\n",
+                "Min: ", min_nFeature_RNA, "\n",
+                "Max: ", max_nFeature_RNA, "\n",
+                "Median: ", median_nFeature_RNA, "\n",
+                "Stdev: ", stdev_nFeature_RNA, "\n",
+                "\n",
+                "Percentage of molecules from mitochondrial genes per cell (percent.mt):\n",
+                "Min: ", min_percent_mt, "\n",
+                "Max: ", max_percent_mt, "\n",
+                "Median: ", median_percent_mt, "\n",
+                "Stdev: ", stdev_percent_mt)
+
+  return(msg)
 }
 
+get_stats_df <- function(seurat_obj) {
+  # Get the number of cells
+  num_cells <- ncol(seurat_obj)
+
+  # Get statistics about the number of molecules detected per cell
+  nCount_RNA <- seurat_obj$nCount_RNA
+  min_nCount_RNA <- min(nCount_RNA)
+  max_nCount_RNA <- max(nCount_RNA)
+  median_nCount_RNA <- median(nCount_RNA)
+  stdev_nCount_RNA <- sd(nCount_RNA)
+
+  # Get statistics about the number of genes detected per cell
+  nFeature_RNA <- seurat_obj$nFeature_RNA
+  min_nFeature_RNA <- min(nFeature_RNA)
+  max_nFeature_RNA <- max(nFeature_RNA)
+  median_nFeature_RNA <- median(nFeature_RNA)
+  stdev_nFeature_RNA <- sd(nFeature_RNA)
+
+  # Get statistics about mitochondrial genes expressed per cell
+  percent_mt <- PercentageFeatureSet(seurat_obj, pattern = "^MT-")
+  min_percent_mt <- min(percent_mt)
+  max_percent_mt <- max(percent_mt)
+  median_percent_mt <- median(percent_mt)
+  stdev_percent_mt <- sd(percent_mt)
+
+  minimums <- c(num_cells, min_nCount_RNA, min_nFeature_RNA, min_percent_mt)
+  maximums <- c(NA, max_nCount_RNA, max_nFeature_RNA, max_percent_mt)
+  medians <- c(NA, median_nCount_RNA, median_nFeature_RNA, median_percent_mt)
+  stdevs <- c(NA, stdev_nCount_RNA, stdev_nFeature_RNA, stdev_percent_mt)
+
+  for (i in 2:4) {
+    minimums[i] <- format(as.numeric(minimums[i]), digits = 6, scientific = ((minimums[i] <= 1e-6) || (minimums[i] >= 1e6)))
+    maximums[i] <- format(as.numeric(maximums[i]), digits = 6, scientific = ((maximums[i] <= 1e-6) || (maximums[i] >= 1e6)))
+    medians[i] <- format(as.numeric(medians[i]), digits = 6, scientific = ((medians[i] <= 1e-6) || (medians[i] >= 1e6)))
+    stdevs[i] <- format(as.numeric(stdevs[i]), digits = 6, scientific = ((stdevs[i] <= 1e-6) || (stdevs[i] >= 1e6)))
+  }
+
+  df <- data.frame(minimums, maximums, medians, stdevs)
+  rownames(df) <- c("Number of cells", "Number of molecules detected per cell", "Number of genes detected per cell", "Percentage of molecules from mitochondrial genes per cell")
+  colnames(df) <- c("min", "max", "median", "stdev")
+
+  return(df)
+}
+
+get_seurat_obj_from_file <- function(gene_counts_file) {
+  gene_counts <- fread(gene_counts_file)
+
+  # Turn any missing gene count into 0
+  for (i in names(gene_counts)) {
+    gene_counts[is.na(get(i)), (i):=0]
+  }
+
+  gene_counts <- gene_counts %>%
+    remove_rownames %>%      # Row names are originally just numbers for each row
+    column_to_rownames("V1") # Replace those numbers by the gene symbol or gene ID
+
+  project_name <- gsub("_gene_count\\.csv$", "", basename(gene_counts_file))
+
+  seurat_obj <- CreateSeuratObject(gene_counts, project = project_name)
+  return(seurat_obj)
+}
+
+get_stats_msg_from_file <- function(gene_counts_file) {
+  seurat_obj <- get_seurat_obj_from_file(gene_counts_file)
+  stats_msg <- get_stats_msg(seurat_obj)
+  return(stats_msg)
+}
+
+get_scatter_plot <- function(seurat_obj) {
+  scatter_plot_obj <- FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by = "orig.ident") +
+    geom_smooth(method = "lm") + NoLegend() +
+    labs(title = "Number of genes (nFeature_RNA) vs number of molecules (nCount_RNA)")
+  return(scatter_plot_obj)
+}
+
+get_scatter_plot_from_file <- function(gene_counts_file) {
+  seurat_obj <- get_seurat_obj_from_file(gene_counts_file)
+  scatter_plot_obj <- get_scatter_plot(seurat_obj)
+  return(scatter_plot_obj)
+}
+
+get_vln_plot <- function(seurat_obj) {
+  seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, pattern = "^MT-")
+  # use group.by to show overall info rather than cluster-level info (after running FindClusters())
+  vln_plot_obj <- VlnPlot(seurat_obj, features = c("nCount_RNA", "nFeature_RNA", "percent.mt"), ncol = 3, group.by = "orig.ident")
+  return(vln_plot_obj)
+}
+
+get_vln_plot_from_file <- function(gene_counts_file) {
+  seurat_obj <- get_seurat_obj_from_file(gene_counts_file)
+  vln_plot_obj <- get_vln_plot(seurat_obj)
+  return(vln_plot_obj)
+}
+
+get_elbow_plot <- function(qc_seurat_obj, ndims) {
+  num_cells <- ncol(qc_seurat_obj)
+  elbow_plot_obj <- ElbowPlot(qc_seurat_obj, ndims = min(num_cells - 1, ndims), reduction = "pca")
+  return(elbow_plot_obj)
+}
+
+get_umap_plot <- function(qc_seurat_obj) {
+  umap_plot_obj <- DimPlot(qc_seurat_obj, reduction = "umap", label = TRUE, seed = 1)
+  return(umap_plot_obj)
+}
+
+get_umap_harm_plot <- function(seurat_obj) {
+  umap_harm_plot_obj <- DimPlot(seurat_obj, reduction = "umap.harm", group.by = c("orig.ident", "harm_cluster"), label = TRUE, seed = 1)
+  return(umap_harm_plot_obj)
+}
+
+get_marker_gene_plot <- function(seurat_obj, features) {
+  marker_gene_plot_obj <- DoHeatmap(seurat_obj, features = features)
+  return(marker_gene_plot_obj)
+}
+
+get_feature_plot <- function(seurat_obj, feature) {
+  feature_plot_obj <- FeaturePlot(seurat_obj, feature)
+  return(feature_plot_obj)
+}
+
+get_dot_plot <- function(seurat_obj, feature, assay = "RNA") {
+  dot_plot_obj <- DotPlot(seurat_obj, feature, assay = assay)
+  return(dot_plot_obj)
+}
+
+write_stats_msg <- function(seurat_obj) {
+  stats_msg <- get_stats_msg(seurat_obj)
+  txt_filename <- "Statistics.txt"
+  writeLines(stats_msg, txt_filename)
+  return(txt_filename)
+}
+
+write_scatter_plot <- function(seurat_obj) {
+  scatter_plot_obj <- get_scatter_plot(seurat_obj)
+  pdf_filename <- "Scatter plot.pdf"
+  ggsave(filename = pdf_filename, plot = scatter_plot_obj, width = 10, height = 6, device = "pdf")
+  return(pdf_filename)
+}
+
+write_vln_plot <- function(seurat_obj) {
+  vln_plot_obj <- get_vln_plot(seurat_obj)
+  pdf_filename <- "Violin plot.pdf"
+  ggsave(filename = pdf_filename, plot = vln_plot_obj, width = 10, height = 6, device = "pdf")
+  return(pdf_filename)
+}
+
+write_elbow_plot <- function(qc_seurat_obj, ndims) {
+  elbow_plot_obj <- get_elbow_plot(qc_seurat_obj, ndims)
+  pdf_filename <- "Elbow plot.pdf"
+  ggsave(filename = pdf_filename, plot = elbow_plot_obj, width = 10, height = 6, device = "pdf")
+  return(pdf_filename)
+}
+
+write_umap_plot <- function(qc_seurat_obj) {
+  umap_plot_obj <- get_umap_plot(qc_seurat_obj)
+  pdf_filename <- "UMAP.pdf"
+  ggsave(filename = pdf_filename, plot = umap_plot_obj, width = 10, height = 6, device = "pdf")
+  return(pdf_filename)
+}
+
+write_umap_harm_plot <- function(seurat_obj) {
+  umap_harm_plot_obj <- get_umap_harm_plot(seurat_obj)
+  pdf_filename <- "UMAP_Harmony.pdf"
+  ggsave(filename = pdf_filename, plot = umap_harm_plot_obj, width = 10, height = 6, device = "pdf")
+  return(pdf_filename)
+}
+
+write_marker_gene_plot <- function(seurat_obj, features) {
+  marker_gene_plot_obj <- get_marker_gene_plot(seurat_obj, features)
+  pdf_filename <- "Top 20 marker genes.pdf"
+  ggsave(filename = pdf_filename, plot = marker_gene_plot_obj, width = 10, height = 6, device = "pdf")
+  return(pdf_filename)
+}
+
+write_gene_expression_plot <- function(seurat_obj, feature) {
+  feature_plot_obj <- get_feature_plot(seurat_obj, feature)
+  pdf_filename <- paste0("Gene expression UMAP plot (", feature, ").pdf")
+  ggsave(filename = pdf_filename, plot = feature_plot_obj, width = 10, height = 6, device = "pdf")
+  return(pdf_filename)
+}
+
+write_transcript_expression_plot <- function(seurat_obj, feature) {
+  feature_plot_obj <- get_feature_plot(seurat_obj, feature)
+  pdf_filename <- paste0("Transcript expression UMAP plot (", feature, ").pdf")
+  ggsave(filename = pdf_filename, plot = feature_plot_obj, width = 10, height = 6, device = "pdf")
+  return(pdf_filename)
+}
+
+write_gene_expression_dot_plot <- function(seurat_obj, feature) {
+  dot_plot_obj <- get_dot_plot(seurat_obj, feature)
+  pdf_filename <- paste0("Gene expression dot plot (", feature, ").pdf")
+  ggsave(filename = pdf_filename, plot = dot_plot_obj, width = 10, height = 6, device = "pdf")
+  return(pdf_filename)
+}
+
+write_transcript_expression_dot_plot <- function(seurat_obj, feature) {
+  dot_plot_obj <- get_dot_plot(seurat_obj, feature, assay = "iso")
+  pdf_filename <- paste0("Transcript expression dot plot (", feature, ").pdf")
+  ggsave(filename = pdf_filename, plot = dot_plot_obj, width = 10, height = 6, device = "pdf")
+  return(pdf_filename)
+}
+
+write_plot <- function(plot_obj, pdf_filename) {
+  ggsave(filename = pdf_filename, plot = plot_obj, width = 10, height = 6, device = "pdf")
+  return(pdf_filename)
+}
+
+perform_qc <- function(seurat_obj, min_nCount_RNA, max_nCount_RNA, min_nFeature_RNA, max_nFeature_RNA, max_percent_mt, npc_input, k_input, cluster_res_input) {
+  seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, pattern = "^MT-")
+
+  qc_seurat_obj <- subset(seurat_obj, subset = nCount_RNA >= min_nCount_RNA & nCount_RNA <= max_nCount_RNA &
+                           nFeature_RNA >= min_nFeature_RNA & nFeature_RNA <= max_nFeature_RNA &
+                           percent.mt <= max_percent_mt, return.null = TRUE)
+
+  # If there are no cells left, stop performing further QC
+  if (is.null(qc_seurat_obj)) {
+    return(FALSE)
+  }
+
+  # Edge case: If the filtering is too stringent and only one cell is left, the remaining steps will fail!
+  # Stop performing further QC if less than two cells are left
+  if (ncol(qc_seurat_obj) < 2) {
+    return(FALSE)
+  }
+
+  # Normalize data
+  qc_seurat_obj <- NormalizeData(qc_seurat_obj, normalization.method = "LogNormalize", scale.factor = 10000)
+
+  # Identify highly variable features
+  qc_seurat_obj <- FindVariableFeatures(qc_seurat_obj, selection.method = "vst", nfeatures = 2000)
+
+  # Apply linear transformation
+  all_genes <- rownames(qc_seurat_obj)
+  qc_seurat_obj <- ScaleData(qc_seurat_obj, features = all_genes)
+
+  # Perform PCA
+  message("Doing PCA...")
+  num_cells <- ncol(qc_seurat_obj)
+  #npc <- min(num_cells - 1, 50)
+  npc <- min(num_cells - 1, npc_input)
+  qc_seurat_obj <- RunPCA(qc_seurat_obj, features = VariableFeatures(object = qc_seurat_obj), npcs = npc)
+  message("After PCA...")
+
+  cluster_res <- cluster_res_input
+  k <- k_input
+
+  # Cluster cells
+  qc_seurat_obj <- FindNeighbors(qc_seurat_obj, dims = 1:npc, k.param = k)
+  qc_seurat_obj <- FindClusters(qc_seurat_obj, resolution = cluster_res)
+
+  qc_seurat_obj <- RunUMAP(qc_seurat_obj, n.neighbors = min(npc, 30), dims = 1:npc, seed.use = 42)
+
+  return(qc_seurat_obj)
+}
+
+perform_qc_from_file <- function(gene_counts_file, min_nCount_RNA, max_nCount_RNA, min_nFeature_RNA, max_nFeature_RNA, max_percent_mt, npc_input, k_input, cluster_res_input) {
+  seurat_obj <- get_seurat_obj_from_file(gene_counts_file)
+  qc_seurat_obj <- perform_qc(seurat_obj, min_nCount_RNA, max_nCount_RNA, min_nFeature_RNA, max_nFeature_RNA, max_percent_mt, npc_input, k_input, cluster_res_input)
+  return(qc_seurat_obj)
+}

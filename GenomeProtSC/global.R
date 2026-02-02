@@ -20,7 +20,6 @@ suppressPackageStartupMessages({
   library(markdown)
   library(devtools)
   library(vsn)
-  library(ggtranscript)
   library(patchwork)
   library(ggrepel)
   library(optparse)
@@ -39,3 +38,4 @@ options(scipen=999)
 source("R/integration_functions.R")
 source("R/visualisation_function.R")
 
+set.seed(42)

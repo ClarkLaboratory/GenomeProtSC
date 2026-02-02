@@ -1,5 +1,4 @@
-
-# inputs: MQ/FragPipe peptides.tsv output, GTF, metadata
+# inputs: MQ/FragPipe peptides.tsv output, GTF, metadata, FASTA, Seurat object RDS file
 # outputs: BED12/GTF files of peptides, ORFs and transcripts, database of peptides with info on locations etc, summary file of peptides
 
 library(stringi)
@@ -15,6 +14,8 @@ option_list = list(
               help="Custom metadata used for proteomics", metavar="character"),
   make_option(c("-g", "--gtf"), type="character", default=NULL,
               help="GTF used to generate custom FASTA", metavar="character"),
+  make_option(c("-r", "--rds"), type="character", default=NULL,
+              help="Seurat object file", metavar="character"),
   make_option(c("-s", "--savepath"), type="character", default=NULL,
               help="Output directory", metavar="character")
 )
@@ -28,14 +29,12 @@ proteomics_import_file <- opt$proteomics
 fasta_import_file <- opt$fasta
 metadata_import_file <- opt$metadata
 gtf_import_file <- opt$gtf
+rds_import_file <- opt$rds
 output_directory <- opt$savepath
 
-# source("~/Documents/GenomeProt/GenomeProt/R/integration_functions.R")
-# proteomics_import_file <- "~/Documents/related_to_genomeprot/kusa_2024/kusa_hk_oct/peptide_combined.txt"
-# fasta_import_file <- "~/Documents/related_to_genomeprot/kusa_2024/kusa_hk_oct/database/proteome_database.fasta"
-# metadata_import_file <- "~/Documents/related_to_genomeprot/kusa_2024/kusa_hk_oct/database/proteome_database_metadata.txt"
-# gtf_import_file <- "~/Documents/related_to_genomeprot/kusa_2024/kusa_hk_oct/database/proteome_database_transcripts.gtf"
-# output_directory <- "~/Documents/related_to_genomeprot/kusa_2024/kusa_hk_oct/dec24"
+if (!dir.exists(output_directory)) {
+  dir.create(output_directory)
+}
 
 # ------------- import files ------------- #
 
@@ -45,10 +44,13 @@ gtf <- makeTxDbFromGFF(gtf_import_file, format="gtf") # make txdb of gtf
 
 orf_df <- import_orf_metadata(metadata_import_file)
 
-md <- import_fasta(fasta_import_file, pd, gtf_import_file)
+seurat_obj <- readRDS(rds_import_file)
+all_transcript_id_gene_pairs <- Features(seurat_obj, assay = "iso")
+all_transcript_ids <- sub("-.*", "", all_transcript_id_gene_pairs)
 
-# ---------------------------------------- #
+gtf_for_exporting <- import(gtf_import_file, format="gtf")
 
+md <- import_fasta(fasta_import_file, pd, gtf, gtf_for_exporting)
 
 # ------------- run analysis ------------- #
 
@@ -101,9 +103,6 @@ mcols(orf_in_genomic_gr)$exon_number <- exon_number_vec
 # re-list
 orf_in_genomic <- split(orf_in_genomic_gr, ~ mcols(orf_in_genomic_gr)$PID)
 
-# ---------------------------------------- #
-
-
 # ------- map peptide transcript coords to spliced genomic coords ------- #
 
 # use ORF transcript coords to determine peptide transcript coords
@@ -148,20 +147,17 @@ mcols(pep_in_genomic_gr)$tx_pid_grouping <- NULL
 # re-list
 pep_in_genomic <- split(pep_in_genomic_gr, ~ names(pep_in_genomic_gr))
 
-# ---------------------------------------- #
-
-
 # ------------- export BED12 files ------------- #
 
 # export bed12 of peptides
-ORFik::export.bed12(pep_in_genomic, paste0(output_directory, "/peptides.bed12"), rgb = 0)
+ORFik::export.bed12(pep_in_genomic, file.path(output_directory, "peptides.bed12"), rgb = 0)
 
 # export bed12 of ORFs
 # currently export with PID_transcript as the name, means ORFs are often present multiple times
-ORFik::export.bed12(orf_in_genomic, paste0(output_directory, "/ORFs.bed12"), rgb = 0)
+ORFik::export.bed12(orf_in_genomic, file.path(output_directory, "ORFs.bed12"), rgb = 0)
 
 # format GTF of all transcripts that had mapped peptides
-gtf_for_exporting <- import(gtf_import_file, format="gtf")
+# gtf_for_exporting <- import(gtf_import_file, format="gtf")
 gtf_filtered <- gtf_for_exporting[mcols(gtf_for_exporting)$transcript_id %in% md$transcript]
 gtf_filtered$group_id <- "transcripts"
 
@@ -174,9 +170,7 @@ names(gtf_as_bed12) <- paste0(gtf_as_bed12$transcript_id, "_", gtf_as_bed12$gene
 tx_in_genomic <- split(gtf_as_bed12, ~ names(gtf_as_bed12))
 
 # export bed12 of transcripts
-ORFik::export.bed12(tx_in_genomic, paste0(output_directory, "/transcripts.bed12"), rgb = 0)
-
-# ---------------------------------------- #
+ORFik::export.bed12(tx_in_genomic, file.path(output_directory, "transcripts.bed12"), rgb = 0)
 
 # ------- transcripts and IsoVis GTF -------- #
 
@@ -222,9 +216,7 @@ isovis_export <- c(gtf_isovis, orf_in_genomic_gr_isovis)
 isovis_export <- sortSeqlevels(isovis_export)
 isovis_export <- sort(isovis_export)
 # export GTF compatible with IsoVis
-rtracklayer::export(isovis_export, paste0(output_directory, "/transcripts_and_ORFs_for_isovis.gtf"), format="gtf")
-
-# ---------------------------------------- #
+rtracklayer::export(isovis_export, file.path(output_directory, "transcripts_and_ORFs_for_isovis.gtf"), format="gtf")
 
 # ------- summary file of peptide mappings -------- #
 
@@ -318,10 +310,13 @@ combined_peptide_result <- combined_peptide_result %>% dplyr::select(peptide,acc
                                                                      gene_identified,transcript_identified)
 
 # export summary data
-write.csv(combined_peptide_result, paste0(output_directory, "/peptide_info.csv"), row.names=F, quote=F)
+write.csv(combined_peptide_result, file.path(output_directory, "peptide_info.csv"), row.names=F, quote=F)
 
-# ---------------------------------------- #
+# ------- include information of all other expressed transcripts that do not have mapped peptides ------- #
 
+gtf_remaining <- gtf_for_exporting[!(mcols(gtf_for_exporting)$transcript_id %in% md$transcript)]
+gtf_remaining <- gtf_remaining[mcols(gtf_remaining)$transcript_id %in% all_transcript_ids]
+gtf_remaining$group_id <- "transcripts"
 
 # ------- combined GTF -------- #
 
@@ -346,10 +341,99 @@ pep_in_genomic_gr_export$type <- "exon"
 pep_in_genomic_gr_export$group_id <- "peptides"
 
 # export annotations for vis
-combined <- c(pep_in_genomic_gr_export, orf_in_genomic_gr, gtf_filtered)
-rtracklayer::export(combined, paste0(output_directory, "/combined_annotations.gtf"), format="gtf")
+gtf_for_exporting$group_id <- "transcripts"
+combined <- c(pep_in_genomic_gr_export, orf_in_genomic_gr, gtf_for_exporting)
+combined_annotations_temp_gtf_path <- file.path(output_directory, "combined_annotations_temp.gtf")
+rtracklayer::export(combined, combined_annotations_temp_gtf_path, format = "gtf")
 
-# ---------------------------------------- #
+# Prepend a comment to the combined annotations GTF file to signify that it comes from GenomeProt(SC)
+combined_annotations_gtf_path <- file.path(output_directory, "combined_annotations.gtf")
+system(paste0("echo '##GenomeProt' > ", combined_annotations_gtf_path))
+system(paste0("cat ", combined_annotations_temp_gtf_path, " >> ", combined_annotations_gtf_path))
+file.remove(combined_annotations_temp_gtf_path)
 
+# ------- level of translational evidence TXT ------- #
 
+# If a transcript is uniquely identified by a peptide, there is definite evidence supporting it being translated
+transcript_ids_with_definite_evidence <- unique((peptide_result %>% dplyr::filter(isTRUE(peptide_ids_orf)))[["transcript_id"]]) # isTRUE()? == "TRUE"? == TRUE?
 
+# Any transcript that has a peptide mapping has potential evidence supporting its translation
+transcript_ids_with_potential_evidence <- unique(peptide_result[["transcript_id"]])
+
+# Remove transcript IDs that are definitely translated
+transcript_ids_with_potential_evidence <- setdiff(transcript_ids_with_potential_evidence, transcript_ids_with_definite_evidence)
+
+if ("meta.data" %in% slotNames(seurat_obj)) {
+  seurat_obj_metadata <- seurat_obj@meta.data
+  if ("harm_cluster" %in% colnames(seurat_obj_metadata)) {
+    cluster_numbers <- seurat_obj@meta.data$harm_cluster
+    cluster_names <- levels(cluster_numbers)
+  } else if ("seurat_clusters" %in% colnames(seurat_obj_metadata)) {
+    cluster_numbers <- seurat_obj$seurat_clusters
+    cluster_names <- levels(seurat_obj)
+  }
+}
+
+# Cache the cell barcode indices for each cluster
+indices_for_cluster_list <- list()
+for (j in seq_along(cluster_names)) {
+  indices_for_cluster <- which(cluster_numbers == j - 1)
+  indices_for_cluster_list[[j]] <- indices_for_cluster
+}
+
+output_txt_table <- data.frame()
+
+# For each feature (i.e. expressed transcript) found in the scRNA-seq experiment, determine the cell clusters that have expressed it
+expressed_vals_info_all <- FetchData(seurat_obj[["iso"]], vars = all_transcript_id_gene_pairs, layer = "counts")
+for (i in seq_along(all_transcript_id_gene_pairs)) {
+  transcript_id_gene_pair <- all_transcript_id_gene_pairs[i]
+  transcript_id <- all_transcript_ids[i]
+  expressed_vals_info <- expressed_vals_info_all[[transcript_id_gene_pair]]
+  expressed_clusters <- c()
+  for (j in seq_along(cluster_names)) {
+    indices_for_cluster <- indices_for_cluster_list[[j]]
+    expression_vals <- expressed_vals_info[indices_for_cluster]
+    if (any(expression_vals > 0)) {
+      cluster_name <- cluster_names[j]
+      expressed_clusters <- c(expressed_clusters, cluster_name)
+    }
+  }
+  expressed_clusters_string <- paste(expressed_clusters, collapse = ", ")
+  new_row <- c(transcript_id, expressed_clusters_string)
+  output_txt_table <- rbind(output_txt_table, new_row)
+}
+
+# Add a column that represents the level of evidence supporting a transcript being translated
+# 2 = Definitely translated, 1 = Potentially translated, 0 or missing = Lack of evidence
+output_txt_table <- cbind(output_txt_table, rep(0, nrow(output_txt_table)))
+
+colnames(output_txt_table) <- c("transcript_id", "expressed_in_clusters", "translation_evidence_level")
+
+# Add information for transcripts that are found in the GTF
+
+# 2: Do this for transcript IDs with definite translation evidence
+for (i in seq_along(transcript_ids_with_definite_evidence)) {
+  transcript_id <- transcript_ids_with_definite_evidence[i]
+  if (transcript_id %in% output_txt_table$transcript_id) {
+    j <- which(output_txt_table$transcript_id == transcript_id)[1]
+    output_txt_table$translation_evidence_level[j] <- 2
+  } else {
+    new_row <- c(transcript_id, "", 2)
+    output_txt_table <- rbind(output_txt_table, new_row)
+  }
+}
+
+# 1: Do this for transcript IDs with potential translation evidence
+for (i in seq_along(transcript_ids_with_potential_evidence)) {
+  transcript_id <- transcript_ids_with_potential_evidence[i]
+  if (transcript_id %in% output_txt_table$transcript_id) {
+    j <- which(output_txt_table$transcript_id == transcript_id)[1]
+    output_txt_table$translation_evidence_level[j] <- 1
+  } else {
+    new_row <- c(transcript_id, "", 1)
+    output_txt_table <- rbind(output_txt_table, new_row)
+  }
+}
+
+# Write the file
+write.csv(output_txt_table, file = file.path(output_directory, "transcript_expression_info.csv"), row.names = FALSE)
