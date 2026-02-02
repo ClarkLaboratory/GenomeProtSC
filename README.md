@@ -1,5 +1,6 @@
 # GenomeProtSC: an integrated proteogenomics analysis platform for long-read single-cell data
 
+## ⚠️ WARNING ⚠️: This repository is currently undergoing heavy updates and may contain code that does not fully work!
 
 ## Contents
 
@@ -116,7 +117,6 @@ The visualisation module uses ggtranscript to generate peptide mapping plots alo
 - Peptide mappings along transcript isoforms (with optional quantitative heatmaps)
 - Allows export of plots as PDFs
 
-
 ## Detailed input and output descriptions
 
 ### 1. Generate database
@@ -125,7 +125,6 @@ The visualisation module uses ggtranscript to generate peptide mapping plots alo
 |------------------------------------|-----------|-----------|-----------------------------------------------------------------------------------------------|
 | Sequencing data  | FASTQ(s)  | Yes  | Mass spec files  | Long-read single-cell sequencing files (one per sample)
 | Reference annotations	 | GTF | Yes  | ENSEMBL or Gencode annotation  |
-
 
 | Output  | File   | File Type | Description      |
 |-------------------------------------|------------------------------------|------------|---------------------------------------------------------------------------------------------|
@@ -160,7 +159,6 @@ MQATPSEAGGESPQSCLSVSRSDWTVGKPVSLLAPLIPPRSSGQPLPFGPGGRQPLRSLLVGMCSGSGRRRSSLSPTMRP
 | gene_overlap  | Encoded by a transcript that overlaps a region with annotated protein-coding genes   |
 | intergenic | Encoded by a transcript that does not overlap a region with annotated protein-coding genes   |
 
-
 ### 2. Proteomics
 
 We recommend installing and running [FragPipe](https://github.com/Nesvilab/FragPipe) for analysing mass spectrometry-based proteomics data.
@@ -170,9 +168,7 @@ We recommend installing and running [FragPipe](https://github.com/Nesvilab/FragP
 | Mass spec data  | mzML, RAW  | Yes  | Mass spec files  |
 | Database (proteome_database.fasta) | FASTA | Yes  | Generated in Module 1. Amino acid sequences of all ORFs in the data  |
 
-
 The output file generated is typically `peptides.txt` or `report.pr_matrix.tsv`.
-
 
 ### 3. Integration
 
@@ -183,7 +179,6 @@ The output file generated is typically `peptides.txt` or `report.pr_matrix.tsv`.
 | Database metadata (proteome_database_metadata.txt) | TXT  | Yes  | Generated in Module 1. Information on each ORF in the data   |
 | Database transcripts (proteome_database_transcripts.gtf) | GTF  | Yes  | Generated in Module 1. Annotations of transcripts used to generate the database   |
 
-
 | Output | File  | File Type | Description    |
 |------------------------------|--------------------------|-----------|----------------------------------------------------------------|
 | Peptide information   | peptide_info.csv   | CSV  | Main results file with peptide mapping data |
@@ -192,7 +187,6 @@ The output file generated is typically `peptides.txt` or `report.pr_matrix.tsv`.
 | Peptide coordinates   | peptides.bed12  | BED12 | Peptide spliced genomic coordinates   |
 | ORF coordinates   | ORFs.bed12 | BED12 | ORF spliced genomic coordinates   |
 | Transcript coordinates  | transcripts.bed12  | BED12 | Transcript spliced genomic coordinates |
-
 
 #### Description of `peptides_info.csv` output:
 
@@ -228,7 +222,6 @@ The output file generated is typically `peptides.txt` or `report.pr_matrix.tsv`.
 | gene_identified | Is gene identified with unique peptide evidence?  | true/false  |
 | transcript_identified   | Is transcript identified with unique peptide evidence?    | true/false  |
 
-
 ### 4. Visualisation
 
 | Input  | File Type | Required? | Description   |
@@ -238,4 +231,3 @@ The output file generated is typically `peptides.txt` or `report.pr_matrix.tsv`.
 | Peptide intensities  | TXT  | No  | Peptide intensity data ‘report.pr_matrix.tsv’  |
 
 **Note:** There is an option to download plots as a PDF.
-
