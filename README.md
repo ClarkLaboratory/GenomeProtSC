@@ -6,15 +6,17 @@
 
 - [Installation](#installation)
 - [General usage](#general-usage)
-  - [Generate database](#1-generate-database)
-  - [Proteomics](#2-proteomics)
-  - [Integration](#3-integration)
-  - [Visualisation](#4-visualisation)
+  - [1. Proteome database generation](#1-proteome-database-generation)
+  - [2. Proteomics](#2-proteomics)
+  - [3. Integration](#3-integration)
+  - [4. Visualization](#4-visualization)
 - [Detailed input and output descriptions](#detailed-input-and-output-descriptions)
-  - [Generate database](#1-generate-database-1)
-  - [Proteomics](#2-proteomics-1)
-  - [Integration](#3-integration-1)
-  - [Visualisation](#4-visualisation-1)
+  - [1a. FLAMES](#1a-flames)
+  - [1b. Seurat](#1b-seurat)
+  - [1c. Proteome database generation](#1c-proteome-database-generation)
+  - [2. Proteomics](#2-proteomics-1)
+  - [3. Integration](#3-integration-1)
+  - [4. Visualization](#4-visualization-1)
 
 ## Installation
 Note: Option 1 and 2 are under development and not yet available.
@@ -139,83 +141,156 @@ If using the command line:
 Rscript -e "shiny::runApp('/path/to/app/GenomeProtSC/', host = '0.0.0.0', port = 3838)"
 ```
 
-## General usage 
+## General usage
 
-GenomeProtSC is an integrated proteogenomics platform with four modules: 1) database generation, 2) proteomics (under development), 3) integration, and 4) visualisation.
+GenomeProtSC is an integrated proteogenomics platform. The application consists of four components: 1) proteome database generation, 2) proteomics (performed partially externally to GenomeProtSC), 3) integration, and 4) visualization. The proteome database generation component is split into three modules: 1a) FLAMES long-read scRNA-seq module, 1b) Seurat module, and 1c) Proteome database generation module.
 
-### 1. Generate database
+## 1. Proteome database generation
 
-The first module processes long-read single-cell data with FLAMES and generates a custom proteome database to perform proteomics searches. The module accepts RNA sequencing FASTQ files from 10X single-cell long-read sequencing. The main output from this module is the results from FLAMES (single-cell transcriptomics), a FASTA file with candidate protein sequences and a metadata file with details of each candidate protein. 
+The first module processes long-read single-cell data with FLAMES and generates a custom proteome database to perform proteomics searches. The module accepts RNA sequencing FASTQ files from 10X single-cell long-read sequencing. The main outputs from this module are the results from FLAMES (single-cell transcriptomics), a FASTA file with candidate protein sequences and a metadata file with details of each candidate protein.
 
-GenomeProtSC currently supports open reading frame (ORF) identification and database generation for humand and mouse data. Users can specify an option to include short upstream ORF (uORF) and downstream ORF (dORF) protein sequences >10 amino acids (AA). Protein sequences are generated based on a user defined minimum length set to >30 AA by default.
+GenomeProtSC currently supports open reading frame (ORF) identification and database generation for human and mouse data. Users can specify an option to include short upstream ORF (uORF) and downstream ORF (dORF) protein sequences > 10 amino acids (AA). Protein sequences are generated based on a user defined minimum length set to > 30 AA by default.
 
-#### Inputs:
-
-- FASTQ file(s) (one per sample, can be gzipped)
-- Reference GENCODE annotation GTF file
-- Reference genome FASTA file
-
-#### Outputs:
-
-- FLAMES output
-- Seurat output and gene/transcript counts
-- FASTA file with protein sequences
-- Metadata file detailing each protein entry
-
-### 2. Proteomics
-
-Currently under development. Please use FragPipe to process proteomics data with the custom database.
-
-### 3. Integration
-
-This module integrates proteomics and transcriptomics data. Peptides are associated back to transcript isoforms and mapped to spliced genomic coordinates for downstream visualisation. This generates BED12 file of transcripts, ORFs and peptides for visualisation in the UCSC genome browser and a combined GTF file for visualisation within the app. An html report is also created that provides a summary of identified known and novel transcripts, uniquely mapping peptides, and known and novel ORFs.
+### 1a. Run FLAMES on long-read single-cell FASTQ data
 
 #### Inputs:
 
-- Database files generated in Module 1
-- Proteomics peptide data
+- FASTQ file(s) containing sequencing reads (one per sample; can be gzipped)
+- Expected number of cells per sample (approximate)
+- Bambu NDR (novel discovery rate; affects the threshold where novel transcripts are called)
+- Reference annotation GTF file (automatically supplied by GenomeProtSC; currently limited to GENCODE/Ensembl human and mouse GTFs)
 
-#### Outputs:
+#### Outputs (zipped):
 
-- Peptide-to-transcript mappings with spliced genomic coordinates (CSV)
-- BED12 files for visualisation in UCSC genome browser
-- HTML report summarising identified transcripts, peptides and ORFs
+- Isoform annotation GTF file containing all isoforms found to be expressed in the samples
+- Quantification files (one gene count CSV & one transcript count CSV per sample)
 
-### 4. Visualisation
-
-The visualisation module uses ggtranscript to generate peptide mapping plots along transcript isoforms with quantitative peptide intensities and transcript expression data (median per cell cluster). This allows users to visualise transcript and peptide abundance across different experimental conditions. This module requires the combined GTF file generated in the integration step, and optionally inputs single-cell transcript counts from Module 1 and peptide intensities from external proteomics analysis. We have included gene filtering options to quickly search for features of interest, such as genes with unknown functions.
+### 1b. Use Seurat to filter, integrate and cluster scRNA-seq samples
 
 #### Inputs:
 
-- GTF from Module 3
-- Single-cell transcript counts and peptide intensities (optional)
+- Gene count CSV(s) from the FLAMES module; one per sample
+- Transcript count CSV(s) from the FLAMES module; one per sample
+- Various parameters
+
+#### Outputs (zipped):
+
+- Text file containing statistics of the sample being investigated
+- Figures (in PDF format) for each plot generated by GenomeProtSC, including violin plots of the number of genes and molecules detected per cell; a scatter plot showing the number of genes per cell against the number of molecules per cell; and a UMAP plot showing cell clusters (if quality control or sample integration were performed).
+- Seurat R object
+- If quality control filtering and/or sample integration were performed, a tab-separated text file showing the sample, cell barcode and cluster name of each cell in the Seurat object is included in the output.
+- If marker genes were calculated, a CSV file containing marker gene information is included in the output.
+
+### 1c. Generate the proteome database
+
+#### Inputs:
+
+- Isoform annotation GTF file from the FLAMES module
+- The species the long-read scRNA-seq data came from (currently limited to human and mouse)
+- ORF length (the minimum number of amino acids ORFs should have)
+- Whether to look for ORFs present in the 5' and/or 3' untranslated regions of reference transcripts
+
+#### Outputs (zipped):
+
+- The generated proteome database (a FASTA file containing the amino acid sequences of all ORFs found in the isoform annotation GTF file)
+- A metadata file (contains information on each ORF found)
+- A GTF annotation of all transcripts used to generate the proteome database
+
+## 2. Proteomics
+
+The matching of peptides to ORFs is currently performed externally to GenomeProtSC using the database produced by module 1c. It is recommended to use FragPipe to process the proteomics data with the generated proteome database.
+
+### Apply variance stabilizing normalization to peptide counts
+
+#### Input:
+
+A peptide counts file obtained from peptide quantification with FragPipe
 
 #### Output:
 
-- Peptide mappings along transcript isoforms (with optional quantitative heatmaps)
-- Allows export of plots as PDFs
+A normalized peptide counts CSV file
+
+## 3. Integration
+
+This module integrates proteomics and transcriptomics data and consists of two steps. The first step involves associating peptides back to transcript isoforms and mapping them to spliced genomic coordinates for downstream visualization, with the main output being a GTF annotation file containing the integration of identified transcripts, peptides and ORFs. The second (optional) step is to integrate marker gene information into the GTF annotation file outputted in the first step.
+
+#### Inputs:
+
+- Proteomics results from FragPipe
+- All 3 output files from the proteome database generation module (module 1c)
+- Seurat R object from the Seurat module (module 1b)
+- Integrated combined GTF annotation (generated by the first step and required for the optional second step)
+- Marker gene CSV file (module 1b, optional)
+
+#### Outputs (zipped):
+
+- An integrated combined GTF annotation of identified transcripts, peptides and ORFs
+- A CSV file containing peptide-to-transcript mappings with spliced genomic coordinates
+- BED12 files for visualizing transcripts, peptides and ORFs in the UCSC Genome Browser
+- A GTF file for visualizing transcripts and ORFs in IsoVis
+- An HTML report summarizing the identified transcripts, peptides and ORFs
+- A transcript expression information file (CSV) showing, for each transcript, the cell clusters it is expressed in and the level of evidence supporting its translation
+
+## 4. Visualization
+
+The visualization module uses IsoVis to generate peptide mapping plots along transcript isoforms with quantitative peptide intensities and uses Seurat to create UMAP plots of the expression of selected genes and isoforms in cell clusters. This allows users to visualize transcript and peptide abundance across different experimental conditions. This module requires the combined GTF annotation file generated in the integration module, and optionally the Seurat R object from module 1b, the peptide intensities from external proteomics analysis, and the transcript expression information CSV file from the integration module. Inside IsoVis, we have included gene filtering options to quickly search for features of interest, such as genes with unknown functions.
+
+#### Inputs (in IsoVis):
+
+- The combined GTF annotation file from the integration module (required)
+- Peptide intensities (optional)
+
+#### Inputs (in GenomeProtSC):
+
+- The transcript expression information CSV file from the integration module (optional)
+- Seurat R object from the Seurat module (required if transcript expression information is uploaded)
+
+#### Outputs (zipped):
+
+- Figures (in PDF format) for each plot generated in GenomeProtSC, including a UMAP plot showing cell cluster annotations, and plots of gene and transcript expression levels at the cell / cluster level
 
 ## Detailed input and output descriptions
 
-### 1. Generate database
+### 1a. FLAMES
 
-| Input  | File Type | Required? | Description     |
-|------------------------------------|-----------|-----------|-----------------------------------------------------------------------------------------------|
-| Sequencing data  | FASTQ(s)  | Yes  | Mass spec files  | Long-read single-cell sequencing files (one per sample)
-| Reference annotations	 | GTF | Yes  | ENSEMBL or Gencode annotation  |
+| Input | Type | Required? | Description |
+|-|-|-|-|
+| Sequencing data | (gzipped) FASTQ(s) | Yes | Long-read single-cell sequencing reads. Upload one per sample. |
 
-| Output  | File   | File Type | Description      |
-|-------------------------------------|------------------------------------|------------|---------------------------------------------------------------------------------------------|
-| Database   | proteome_database.fasta  | FASTA | Amino acid sequences of all ORFs in the data  |
-| Database metadata | proteome_database_metadata.txt | TXT  | Information on each ORF in the data    |
-| Database transcripts | proteome_database_transcripts.gtf | GTF  | Annotations of transcripts used to generate the database   |
-| Single-cell gene counts | gene_counts.txt  | TXT  | Gene count file with cells as columns and transcripts as rows  |
-| Single-cell transcript counts | transcript_counts.txt  | TXT  | Transcript count file with cells as columns and transcripts as rows  |
-| Seurat object	| seurat_object.rds	| RDS	| Seurat object that can be loaded into R with ‘readRDS' |
-| Seurat cell clusters	| sample_cellbarcode_cellcluster.txt	| TXT	| Metadata file with clusters per cell per sample |
-| UMAP plot	| UMAP.pdf	| PDF	| UMAP plot coloured by cell clusters |
+| Output | Type | Filename | Description |
+|-|-|-|-|
+| Gene counts | CSV | <sample_name>_gene_count.csv (e.g. if the user uploaded early.fastq, they will get early_gene_count.csv) | Gene count file with cell barcodes as columns and genes as rows. One for each sample. |
+| Transcript counts | CSV | <sample_name>_transcript_count.csv | Transcript count file with cell barcodes as columns and transcripts as rows. One for each sample. |
+| Isoform annotation | GTF | isoform_annotated.gtf | Annotation of all isoforms found to be expressed by the samples. |
 
-Proteome FASTA examples and header formats: 
+### 1b. Seurat
+
+| Input | Type | Required? | Description |
+|-|-|-|-|
+| Gene counts | CSV(s) | Yes | Generated in module 1a. Gene count file with cell barcodes as columns and genes as rows. Upload one for each sample. |
+| Transcript counts | CSV(s) | Yes | Generated in module 1a. Transcript count file with cell barcodes as columns and transcripts as rows. Upload one for each sample. |
+
+| Output | Type | Filename | Description |
+|-|-|-|-|
+| Sample statistics | TXT | Statistics.txt | A textual description of the statistics of the number of genes and molecules detected per cell, and the percentage of features from mitochondrial genes per cell. |
+| Exported figures | PDFs | <plot_name>.pdf | One PDF for each figure drawn. |
+| Seurat object | RDS | seurat_object.rds | Seurat object of the selected sample. Can be loaded into R with the `readRDS()` function. |
+| Samples, barcodes and clusters | Tab-separated text (TXT) | sample_barcode_cluster.txt | The sample, barcode and cluster of each cell. Applicable if quality control or sample integration were done. |
+| Marker gene information | CSV | marker_genes.csv | Metrics for each marker gene found (e.g. adjusted p-value, proportion of cells expressing the gene in the cluster it is a marker of, average log2(fold change)) and the clusters they are marker genes of. Applicable if marker genes were calculated. |
+
+### 1c. Proteome database generation
+
+| Input | Type | Required? | Description |
+|-|-|-|-|
+| Isoform annotation | GTF | Yes | Generated in module 1a. Annotation of all isoforms found to be expressed in the scRNA-seq samples. |
+
+| Output | Type | Filename | Description |
+|-|-|-|-|
+| Proteome database | FASTA | proteome_database.fasta | Amino acid sequences of all ORFs in the input. |
+| Proteome database metadata | TXT | proteome_database_metadata.txt | Information on each ORF in the database. |
+| Proteome database transcripts | GTF | proteome_database_transcripts.gtf | Annotation of all transcripts used to generate the database. |
+
+Proteome FASTA examples (unannotated ORFs are denoted by "ORF_"):
 ```
 >protein_accession|CO=genomic_coordinates GA=gene_accession GN=gene_name TA=transcript_accession
 MCGNNMSAPMPAVVPAARKATAAVIFLHGLGDTGHGWAEAFAGIKSPHIKYICPHAPVMPVTLNMNMAMPSWFDIVGLSPDSQEDESGIKQAAETVKALIDQEVKNGIPSNRIILGGFSQGPINSANRDISVLQCHGDCDPLVPLMFGSLTVERLKALINPANVTFKIYEGMMHSSCQQEMMDVKHFIDKLLPPID
@@ -224,88 +299,131 @@ MEDEVVRIAKKMDKMVQKKNAAGALDLLKELKNIPMTLELLQSTRIGMSVNALRKQSTDEEVTSLAKSLIKSWKKLLDGP
 >ORF_3|CO=chr2:53029193-53081430 GA=ENSMUSG00000061136.17 GN=Prpf40a TA=ENSMUST00000209364.3
 MQATPSEAGGESPQSCLSVSRSDWTVGKPVSLLAPLIPPRSSGQPLPFGPGGRQPLRSLLVGMCSGSGRRRSSLSPTMRPGTGAERGGLMMGHPGMHYAPMGMHPMGQRANMPPVPHGMMPQMMPPMGG
 ```
-**Note:** Unannotated ORFs are denoted by "ORF_" and variant proteins by “mORF_” followed by a unique number. UniProt or RefSeq accessions are retained for annotated proteins.
+
+**Note:** UniProt or RefSeq accessions are retained for annotated proteins.
 
 #### Open reading frame (ORF) category definitions:
 
 | Type  | Definition    |
-|----------------|-----------------------------------------------------------------------------------------------------|
-| CDS  | Annotated in UniProt or RefSeq    |
-| 5UTR  | Coordinates are within the 5' UTR region of an mRNA transcript    |
-| 3UTR  | Coordinates are within the 3' UTR region of an mRNA transcript    |
-| 5UTR:CDS  | Start site is within the 5' UTR region and stop site is within the CDS region of an mRNA transcript |
-| gene_overlap  | Encoded by a transcript that overlaps a region with annotated protein-coding genes   |
-| intergenic | Encoded by a transcript that does not overlap a region with annotated protein-coding genes   |
+|-|-|
+| CDS | Annotated in UniProt or RefSeq |
+| 5UTR | Coordinates are within the 5' UTR region of an mRNA transcript |
+| 3UTR | Coordinates are within the 3' UTR region of an mRNA transcript |
+| 5UTR:CDS | Start site is within the 5' UTR region and stop site is within the CDS region of an mRNA transcript |
+| gene_overlap | Encoded by a transcript that overlaps a region with annotated protein-coding genes |
+| intergenic | Encoded by a transcript that does not overlap a region with annotated protein-coding genes |
 
 ### 2. Proteomics
 
 We recommend installing and running [FragPipe](https://github.com/Nesvilab/FragPipe) for analysing mass spectrometry-based proteomics data.
 
-| Input  | File Type | Required? | Description     |
-|------------------------------------|-----------|-----------|-----------------------------------------------------------------------------------------------|
-| Mass spec data  | mzML, RAW  | Yes  | Mass spec files  |
-| Database (proteome_database.fasta) | FASTA | Yes  | Generated in Module 1. Amino acid sequences of all ORFs in the data  |
+#### Peptide detection and quantification with FragPipe:
 
-The output file generated is typically `peptides.txt` or `report.pr_matrix.tsv`.
+| Input  | Type | Required? | Description |
+|-|-|-|-|
+| Mass spectrometry data | mzML, RAW | Yes | Mass spectrometry files. |
+| Proteome database (proteome_database.fasta) | FASTA | Yes | Generated in module 1c. Amino acid sequences of all ORFs in the isoforms found to be expressed by the scRNA-seq samples. |
+
+The FragPipe output file generated should be either `peptides.txt` or `peptide.tsv`. Additionally, if FragPipe were configured to perform peptide quantification, `report.pr_matrix.tsv` would also be output.
+
+#### Applying variance stabilizing normalization to peptide counts:
+
+| Input  | Type | Required? | Description |
+|-|-|-|-|
+| Peptide counts | CSV / TXT / TSV | Yes | Generated from peptide quantification with FragPipe. |
+
+| Output | Type | Description |
+|-|-|-|
+| Normalized peptide counts | CSV | Peptide counts normalized with the variance stabilizing normalization algorithm. |
 
 ### 3. Integration
 
-| Input  | File Type | Required? | Description     |
-|------------------------------------|-----------|-----------|-----------------------------------------------------------------------------------------------|
-| Proteomics peptide data  | TSV/TXT  | Yes  | Peptide results. Typically, 'peptides.txt', ‘peptide.tsv' or ‘report.pr_matrix.tsv'  |
-| Database (proteome_database.fasta) | FASTA | Yes  | Generated in Module 1. Amino acid sequences of all ORFs in the data  |
-| Database metadata (proteome_database_metadata.txt) | TXT  | Yes  | Generated in Module 1. Information on each ORF in the data   |
-| Database transcripts (proteome_database_transcripts.gtf) | GTF  | Yes  | Generated in Module 1. Annotations of transcripts used to generate the database   |
+#### Integration of transcriptomics and proteomics data:
 
-| Output | File  | File Type | Description    |
-|------------------------------|--------------------------|-----------|----------------------------------------------------------------|
-| Peptide information   | peptide_info.csv   | CSV  | Main results file with peptide mapping data |
-| Report | summary_report.html | HTML | Summary report  |
-| Combined annotation data | combined_annotations.gtf | GTF  | Annotations of peptides, ORFs, and transcripts for visualisation |
-| Peptide coordinates   | peptides.bed12  | BED12 | Peptide spliced genomic coordinates   |
-| ORF coordinates   | ORFs.bed12 | BED12 | ORF spliced genomic coordinates   |
-| Transcript coordinates  | transcripts.bed12  | BED12 | Transcript spliced genomic coordinates |
+| Input  | Type | Required? | Description |
+|-|-|-|-|
+| Proteomics peptide data | CSV / TSV / TXT | Yes | Generated in module 2. Peptide results. Typically 'peptides.txt', 'peptide.tsv' or 'report.pr_matrix.tsv'. |
+| Proteome database (proteome_database.fasta) | FASTA | Yes | Generated in module 1c. Amino acid sequences of all ORFs in the isoforms found to be expressed by the scRNA-seq samples. |
+| Proteome database metadata (proteome_database_metadata.txt) | TXT | Yes | Generated in module 1c. Information on each ORF in the database. |
+| Proteome database transcripts (proteome_database_transcripts.gtf) | GTF | Yes | Generated in module 1c. Annotation of all transcripts used to generate the database. |
+| Seurat R object | RDS | Yes | Generated in module 1b. Seurat object of an scRNA-seq sample. Can be loaded into R with the `readRDS()` function. |
+
+| Output | Type | Filename | Description |
+|-|-|-|-|
+| Peptide information | CSV | peptide_info.csv | Main results file with peptide mapping data. |
+| Report | HTML | summary_report.html | Summary report. |
+| Combined annotation data | GTF | combined_annotations.gtf | Annotations of transcripts, peptides, and ORFs for visualization. |
+| Transcripts with CDS annotation data | GTF | transcripts_and_ORFs_for_isovis.gtf | Annotations of transcripts and ORFs for visualization in IsoVis. |
+| Transcript coordinates | BED12 | transcripts.bed12 | Transcript spliced genomic coordinates. |
+| Peptide coordinates | BED12 | peptides.bed12 | Peptide spliced genomic coordinates. |
+| ORF coordinates | BED12 | ORFs.bed12 | ORF spliced genomic coordinates. |
+| Transcript expression information | CSV | transcript_expression_info.csv | The level of evidence suggesting translation of each transcript and the cell clusters found to be expressing each transcript. |
+
+#### Integration of combined annotations and marker genes:
+
+| Input | Type | Required? | Description |
+|-|-|-|-|
+| Combined annotation data | GTF | Yes | Generated from the integration of transcriptomics and proteomics data in module 3. |
+| Marker gene information | CSV | Yes | Generated in module 1b. |
+
+| Output | Type | Filename | Description |
+|-|-|-|-|
+| Combined annotation data with marker genes | GTF (zipped) | combined_annotations_with_marker_genes.gtf | Combined annotation data containing marker gene information. |
 
 #### Description of `peptides_info.csv` output:
 
-| Column Name | Description     | Class  |
-|--------------------------------|----------------------------------------------------------------------------------------|--------------|
-| peptide | Peptide sequence   | character  |
-| accession  | Protein accession    | character  |
-| PID   | protein_accession\|CO=genomic_coordinates (included for compatibility with FASTA header) | character  |
-| transcript_id   | ENSEMBL or novel transcript ID     | character  |
-| gene_id | ENSEMBL gene ID   | character  |
-| gene_name  | Gene name/symbol   | character  |
-| strand  | Strand (+ or -)   | character  |
-| number_exons | Number of exons spanned by the peptide   | integer |
-| transcript_length   | Transcript length (nt)     | integer |
-| transcript_biotype   | Transcript biotype from Gencode    | character  |
-| simplified_biotype   | Simplified transcript biotype    | character  |
-| protein_length   | Protein length (AA)   | integer |
-| orf_genomic_coordinates  | Genomic coordinates of ORF    | numeric |
-| orf_type | Annotated, unannotated, or variant protein   | character  |
-| localisation | ORF location in the genome (see ORF category definitions)  | character  |
-| uniprot_status   | Review status in UniProt (reviewed/unreviewed)    | character  |
-| openprot_id | OpenProt ID if present     | character  |
-| molecular_weight(kDA)   | Molecular weight of protein (KDa)   | numeric |
-| isoelectric_point   | Isoelectric point of ORF calculated using pKa scale EMBOSS (Rice et al., 2000)   | numeric |
-| hydrophobicity   | Hydrophobicity profile of ORF calculated using Kyte-Doolittle scale (Kyte et al., 1982) | numeric |
-| aliphatic_index | Aliphatic index of ORF (Ikai 1980)  | numeric |
-| longest_orf_in_transcript | Longest ORF in the transcript (longest within CDS regions for known proteins)   | true/false  |
-| peptide_ids_gene | Is peptide uniquely mapped to gene?    | true/false  |
-| peptide_ids_orf | Is peptide uniquely mapped to ORF?    | true/false  |
-| peptide_ids_transcript   | Is peptide uniquely mapped to transcript?   | true/false  |
-| shared_novel_protein_peptide  | Is peptide shared with other novel proteins?  | true/false  |
-| orf_identified   | Is ORF identified with unique peptide evidence?  | true/false  |
-| gene_identified | Is gene identified with unique peptide evidence?  | true/false  |
-| transcript_identified   | Is transcript identified with unique peptide evidence?    | true/false  |
+| Column name | Class | Description |
+|-|-|-|
+| peptide | character | Peptide sequence |
+| accession | character | Protein accession |
+| PID | character | protein_accession\|CO=genomic_coordinates (included for compatibility with FASTA header) |
+| transcript_id | character | ENSEMBL or novel transcript ID |
+| gene_id | character | ENSEMBL gene ID |
+| gene_name | character | Gene name/symbol |
+| strand | character | Strand (+ or -) |
+| number_exons | integer | Number of exons spanned by the peptide |
+| transcript_length | integer | Transcript length (nt) |
+| transcript_biotype | character | Transcript biotype from GTF |
+| simplified_biotype | character | Simplified transcript biotype |
+| protein_length | integer | Protein length (AA) |
+| orf_genomic_coordinates | numeric | Genomic coordinates of ORF |
+| orf_type | character | Annotated, unannotated, or variant protein |
+| localisation | character | ORF location in the genome (see ORF category definitions) |
+| uniprot_status | character | Review status in UniProt (reviewed / unreviewed) |
+| openprot_id | character | OpenProt ID (if present) |
+| molecular_weight(kDA) | numeric | Molecular weight of protein (kDa) |
+| isoelectric_point | numeric | Isoelectric point of ORF calculated using pKa scale EMBOSS (Rice et al., 2000) |
+| hydrophobicity | numeric | Hydrophobicity profile of ORF calculated using Kyte-Doolittle scale (Kyte et al., 1982) |
+| aliphatic_index | numeric | Aliphatic index of ORF (Ikai 1980) |
+| longest_orf_in_transcript | true/false | Longest ORF in the transcript (longest within CDS regions for known proteins) |
+| peptide_ids_gene | true/false | Is peptide uniquely mapped to gene? |
+| peptide_ids_orf | true/false | Is peptide uniquely mapped to ORF? |
+| peptide_ids_transcript | true/false | Is peptide uniquely mapped to transcript? |
+| shared_novel_protein_peptide | true/false | Is peptide shared with other novel proteins? |
+| orf_identified | true/false | Is ORF identified with unique peptide evidence? |
+| gene_identified | true/false | Is gene identified with unique peptide evidence? |
+| transcript_identified | true/false | Is transcript identified with unique peptide evidence? |
 
-### 4. Visualisation
+#### Description of `transcript_expression_info.csv` output:
 
-| Input  | File Type | Required? | Description   |
-|--------------------------------|-----------|-----------|---------------------------------------------------------|
-| Combined annotations (combined_annotations.gtf)  | GTF  | Yes  | Generated in Module 3, annotations of peptides, ORFs, and transcripts    |
-| Single-cell transcript counts (transcript_counts.txt)   | TXT/CSV  | No  | Generated in Module 1, transcript counts per cell barcode    |
-| Peptide intensities  | TXT  | No  | Peptide intensity data ‘report.pr_matrix.tsv'  |
+| Column name | Class | Description |
+|-|-|-|
+| transcript_id | character | ENSEMBL or novel transcript ID |
+| expressed_in_clusters | character | List of cell clusters expressing the transcript |
+| translation_evidence_level | integer | A number representing the level of evidence suggesting the transcript was translated. 0, 1 and 2 refer to a lack of evidence, potential evidence, and definite evidence respectively. |
 
-**Note:** There is an option to download plots as a PDF.
+### 4. Visualization
+
+| Input (in GenomeProtSC) | Type | Required? | Description |
+|-|-|-|-|
+| Transcript expression information | CSV | No | Generated in module 3. The level of evidence suggesting translation of each transcript and the cell clusters found to be expressing each transcript. |
+| Seurat R object | RDS | Only if the above file is uploaded | Generated in module 1b. Seurat object of an scRNA-seq sample. Can be loaded into R with the `readRDS()` function. |
+
+| Input (in IsoVis) | Type | Required? | Description |
+|-|-|-|-|
+| Combined annotations | GTF | Yes | Generated in module 3. Annotations of transcripts, peptides and ORFs for visualization. Can contain marker gene information if the user integrated such information from module 1b. Upload as a **stack data** file in IsoVis. |
+| Peptide intensities | CSV / TXT / TSV | No | Generated in module 2 if peptide quantification were done. Typically 'report.pr_matrix.tsv'. Upload as a **peptide counts data** file in IsoVis. |
+
+| Output | Type | Filename | Description |
+|-|-|-|-|
+| Exported figures (zipped) | PDFs | <plot_name>.gtf | One PDF for each figure drawn in GenomeProtSC. |
