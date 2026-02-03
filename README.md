@@ -19,7 +19,7 @@
 ## Installation
 Note: Option 1 and 2 are under development and not yet available.
 
-### Option 1 (recommended): Run the shiny application with Docker
+### Option 1 (recommended): Run the R Shiny application with Docker
 Make sure you have [Docker](https://docs.docker.com/engine/install/) installed and the application running in the background before you begin.
 
 Open your terminal application and run:
@@ -27,9 +27,9 @@ Open your terminal application and run:
 docker run --rm -p 3838:3838 josieg/genomeprotsc:v1
 ```
 This will take approximately 10-20 minutes to download the Docker image the first time the app is run.
-The --rm removes the container after it’s stopped and the -p 3838:3838 maps your local port 3838 to the same port inside the container.
+The --rm removes the container after it's stopped and the -p 3838:3838 maps your local port 3838 to the same port inside the container.
 
-To **access the local shiny application**, navigate to this link on your web browser http://0.0.0.0:3838.
+To **access the local R Shiny application**, navigate to this link on your web browser http://0.0.0.0:3838.
 
 You can now upload all files and run the steps in your web browser. Although the app is running through a web browser, no files are being uploaded to the internet and everything will be run locally.
 
@@ -38,27 +38,105 @@ To stop the container, close the web browser tab and head back to the terminal w
 ### Option 2 (recommmended for downstream analysis only): Access GenomeProtSC online
 https://genomeprotSC.researchsoftware.unimelb.edu.au/
 
-### Option 3: Locally install the shiny application
+### Option 3: Install and run the R Shiny application locally
 
-The application has substantial dependencies. 
+#### Ensure your operating system is up to date:
 
-Clone this repository:
 ```
-git clone https://github.com/josiegleeson/GenomeProtSC.git
+sudo apt update
+sudo apt install software-properties-common
 ```
 
-Unzip the uniprot+openprot reference file in the GenomeProtSC/data directory.
+#### Install R:
+
+Click the following link and download the version for your operating system (Windows, macOS or Linux): https://cran.r-project.org/index.html
+
+#### Install RStudio:
+
+Click the following link and download RStudio for Desktop: https://posit.co/download/rstudio-desktop/
+
+#### Install Python and cd-hit:
+
+```
+# if you don't already have python3
+sudo apt install python
+sudo apt install python3-pip
+
+pip install biopython
+pip install py-cdhit
+pip install peptides
+
+# install cd-hit
+sudo apt install cd-hit
+```
+
+If you do not have sudo permissions, you can instead use a package manager such as Conda or compile the dependencies from source.
+
+#### Install the required R and Bioconductor packages:
+
+```
+# either run the following commands with 'sudo' or open RStudio and install
+# install Bioconductor and FLAMES (replace '3.22' with the latest Bioconductor version)
+
+sudo R -e 'install.packages("BiocManager")'
+sudo R -e 'BiocManager::install(version = "3.22")'
+sudo R -e 'BiocManager::install("FLAMES")'
+
+# install base R packages
+sudo R -e 'install.packages(c("shiny", "shinyjs", "shinythemes", "shinydashboard", "data.table", "dplyr", "tidyr", "readr", "tibble", "purrr", "forcats", "phylotools", "markdown", "rmarkdown", "ggplot2", "ggrepel", "devtools", "optparse", "reshape2", "stringr", "stringi", "RColorBrewer", "scales", "gplots"))'
+
+# install other Bioconductor packages
+sudo R -e 'BiocManager::install(c("retracklayer", "ORFik", "GenomicAlignments", "GenomicFeatures", "GenomicRanges", "Biostrings", "mygene", "ORFik", "patchwork", "Rsamtools", "SummarizedExperiment", "tximport", "patchwork", "vsn"), ask = F)'
+
+# install required genomes from Bioconductor
+sudo R -e 'BiocManager::install(c("BSgenome.Hsapiens.UCSC.hg38", "BSgenome.Mmusculus.UCSC.mm39"))'
+```
+
+Note that FLAMES takes a significant amount of time to install.
+
+#### Export genome files:
+
+```
+# in R or R studio, export BSGenome objects as FASTA files
+library(BSgenome.Hsapiens.UCSC.hg38)
+library(BSgenome.Mmusculus.UCSC.mm39)
+
+# files need to be saved in the GenomeProtSC/refs directory for FLAMES
+
+# human
+genomedb <- BSgenome.Hsapiens.UCSC.hg38
+export(genomedb, "path/to/GenomeProtSC/refs/human.fasta", verbose = T, compress = F, format = "fasta")
+
+# mouse
+genomedb <- BSgenome.Mmusculus.UCSC.mm39
+export(genomedb, "path/to/GenomeProtSC/refs/mouse.fasta", verbose = T, compress = F, format = "fasta")
+```
+
+#### Clone this repository:
+
+```
+git clone https://github.com/ClarkLaboratory/GenomeProtSC.git
+```
+
+#### Decompress the UniProt + OpenProt reference files:
+
 ```
 cd GenomeProtSC/data
-unzip openprot_uniprotDb_hs.txt.zip
-unzip *
+gunzip openprot_uniprotDb_hs.txt.gz
+gunzip openprot_uniprotDb_mm.txt.gz
 ```
 
-Place the reference genome FASTA in the GenomeProtSC/refs directory and re-name (human.fa or mouse.fa).
+#### Run the GenomeProtSC app:
+
+If using RStudio:
+- Open either the `server.R` file or the `ui.R` file inside the GenomeProtSC folder in RStudio
+- Click the 'Run App' button in the top right corner
+
+If using the command line:
+
 ```
-cd GenomeProtSC/refs
-cp human.reference.genome.fa .
-mv human.reference.genome.fa human.fa
+# provide the path to the GenomeProtSC app
+Rscript -e "shiny::runApp('/path/to/app/GenomeProtSC/', host = '0.0.0.0', port = 3838)"
 ```
 
 ## General usage 
@@ -133,7 +211,7 @@ The visualisation module uses ggtranscript to generate peptide mapping plots alo
 | Database transcripts | proteome_database_transcripts.gtf | GTF  | Annotations of transcripts used to generate the database   |
 | Single-cell gene counts | gene_counts.txt  | TXT  | Gene count file with cells as columns and transcripts as rows  |
 | Single-cell transcript counts | transcript_counts.txt  | TXT  | Transcript count file with cells as columns and transcripts as rows  |
-| Seurat object	| seurat_object.rds	| RDS	| Seurat object that can be loaded into R with ‘readRDS’ |
+| Seurat object	| seurat_object.rds	| RDS	| Seurat object that can be loaded into R with ‘readRDS' |
 | Seurat cell clusters	| sample_cellbarcode_cellcluster.txt	| TXT	| Metadata file with clusters per cell per sample |
 | UMAP plot	| UMAP.pdf	| PDF	| UMAP plot coloured by cell clusters |
 
@@ -153,9 +231,9 @@ MQATPSEAGGESPQSCLSVSRSDWTVGKPVSLLAPLIPPRSSGQPLPFGPGGRQPLRSLLVGMCSGSGRRRSSLSPTMRP
 | Type  | Definition    |
 |----------------|-----------------------------------------------------------------------------------------------------|
 | CDS  | Annotated in UniProt or RefSeq    |
-| 5UTR  | Coordinates are within the 5’ UTR region of an mRNA transcript    |
-| 3UTR  | Coordinates are within the 3’ UTR region of an mRNA transcript    |
-| 5UTR:CDS  | Start site is within the 5’ UTR region and stop site is within the CDS region of an mRNA transcript |
+| 5UTR  | Coordinates are within the 5' UTR region of an mRNA transcript    |
+| 3UTR  | Coordinates are within the 3' UTR region of an mRNA transcript    |
+| 5UTR:CDS  | Start site is within the 5' UTR region and stop site is within the CDS region of an mRNA transcript |
 | gene_overlap  | Encoded by a transcript that overlaps a region with annotated protein-coding genes   |
 | intergenic | Encoded by a transcript that does not overlap a region with annotated protein-coding genes   |
 
@@ -174,7 +252,7 @@ The output file generated is typically `peptides.txt` or `report.pr_matrix.tsv`.
 
 | Input  | File Type | Required? | Description     |
 |------------------------------------|-----------|-----------|-----------------------------------------------------------------------------------------------|
-| Proteomics peptide data  | TSV/TXT  | Yes  | Peptide results. Typically, 'peptides.txt', ‘peptide.tsv’ or ‘report.pr_matrix.tsv’  |
+| Proteomics peptide data  | TSV/TXT  | Yes  | Peptide results. Typically, 'peptides.txt', ‘peptide.tsv' or ‘report.pr_matrix.tsv'  |
 | Database (proteome_database.fasta) | FASTA | Yes  | Generated in Module 1. Amino acid sequences of all ORFs in the data  |
 | Database metadata (proteome_database_metadata.txt) | TXT  | Yes  | Generated in Module 1. Information on each ORF in the data   |
 | Database transcripts (proteome_database_transcripts.gtf) | GTF  | Yes  | Generated in Module 1. Annotations of transcripts used to generate the database   |
@@ -228,6 +306,6 @@ The output file generated is typically `peptides.txt` or `report.pr_matrix.tsv`.
 |--------------------------------|-----------|-----------|---------------------------------------------------------|
 | Combined annotations (combined_annotations.gtf)  | GTF  | Yes  | Generated in Module 3, annotations of peptides, ORFs, and transcripts    |
 | Single-cell transcript counts (transcript_counts.txt)   | TXT/CSV  | No  | Generated in Module 1, transcript counts per cell barcode    |
-| Peptide intensities  | TXT  | No  | Peptide intensity data ‘report.pr_matrix.tsv’  |
+| Peptide intensities  | TXT  | No  | Peptide intensity data ‘report.pr_matrix.tsv'  |
 
 **Note:** There is an option to download plots as a PDF.
