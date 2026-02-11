@@ -25,7 +25,7 @@ Note: Option 1 and 2 are under development and not yet available.
 Make sure you have [Docker](https://docs.docker.com/engine/install/) installed and the application running in the background before you begin.
 
 Open your terminal application and run:
-```
+```bash
 docker run --rm -p 3838:3838 josieg/genomeprotsc:v1
 ```
 This will take approximately 10-20 minutes to download the Docker image the first time the app is run.
@@ -38,13 +38,13 @@ You can now upload all files and run the steps in your web browser. Although the
 To stop the container, close the web browser tab and head back to the terminal where Docker is running and press ctrl+c.
 
 ### Option 2 (recommmended for downstream analysis only): Access GenomeProtSC online
-https://genomeprotSC.researchsoftware.unimelb.edu.au/
+https://genomeprotsc.unimelb-genomeprot.cloud.edu.au/
 
 ### Option 3: Install and run the R Shiny application locally
 
 #### Ensure your operating system is up to date:
 
-```
+```bash
 sudo apt update
 sudo apt install software-properties-common
 ```
@@ -59,7 +59,7 @@ Click the following link and download RStudio for Desktop: https://posit.co/down
 
 #### Install Python and cd-hit:
 
-```
+```bash
 # if you don't already have python3
 sudo apt install python
 sudo apt install python3-pip
@@ -76,7 +76,7 @@ If you do not have sudo permissions, you can instead use a package manager such 
 
 #### Install the required R and Bioconductor packages:
 
-```
+```bash
 # either run the following commands with 'sudo' or open RStudio and install
 # install Bioconductor and FLAMES (replace '3.22' with the latest Bioconductor version)
 
@@ -98,7 +98,7 @@ Note that FLAMES takes a significant amount of time to install.
 
 #### Export genome files:
 
-```
+```R
 # in R or R studio, export BSGenome objects as FASTA files
 library(BSgenome.Hsapiens.UCSC.hg38)
 library(BSgenome.Mmusculus.UCSC.mm39)
@@ -116,13 +116,13 @@ export(genomedb, "path/to/GenomeProtSC/refs/mouse.fasta", verbose = T, compress 
 
 #### Clone this repository:
 
-```
+```bash
 git clone https://github.com/ClarkLaboratory/GenomeProtSC.git
 ```
 
 #### Decompress the UniProt + OpenProt reference files:
 
-```
+```bash
 cd GenomeProtSC/data
 gunzip openprot_uniprotDb_hs.txt.gz
 gunzip openprot_uniprotDb_mm.txt.gz
@@ -136,7 +136,7 @@ If using RStudio:
 
 If using the command line:
 
-```
+```bash
 # provide the path to the GenomeProtSC app
 Rscript -e "shiny::runApp('/path/to/app/GenomeProtSC/', host = '0.0.0.0', port = 3838)"
 ```
