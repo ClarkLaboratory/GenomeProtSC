@@ -83,10 +83,10 @@ sudo R -e 'BiocManager::install(version = "3.22")'
 sudo R -e 'BiocManager::install("FLAMES")'
 
 # install base R packages
-sudo R -e 'install.packages(c("shiny", "shinyjs", "shinythemes", "shinydashboard", "data.table", "dplyr", "tidyr", "readr", "tibble", "purrr", "forcats", "phylotools", "markdown", "rmarkdown", "ggplot2", "ggrepel", "devtools", "optparse", "reshape2", "stringr", "stringi", "RColorBrewer", "scales", "gplots"))'
+sudo R -e 'install.packages(c("shiny", "shinyjs", "shinythemes", "shinydashboard", "data.table", "dplyr", "tidyr", "readr", "tibble", "purrr", "forcats", "phylotools", "markdown", "rmarkdown", "ggplot2", "ggrepel", "devtools", "optparse", "reshape2", "stringr", "stringi", "RColorBrewer", "scales", "gplots", "Seurat"))'
 
 # install other Bioconductor packages
-sudo R -e 'BiocManager::install(c("rtracklayer", "ORFik", "GenomicAlignments", "GenomicFeatures", "GenomicRanges", "Seurat", "Biostrings", "mygene", "ORFik", "patchwork", "Rsamtools", "SummarizedExperiment", "tximport", "patchwork", "vsn"), ask = F)'
+sudo R -e 'BiocManager::install(c("rtracklayer", "ORFik", "GenomicAlignments", "GenomicFeatures", "GenomicRanges", "Biostrings", "mygene", "ORFik", "patchwork", "Rsamtools", "SummarizedExperiment", "tximport", "patchwork", "vsn"), ask = F)'
 
 # install required genomes from Bioconductor
 sudo R -e 'BiocManager::install(c("BSgenome.Hsapiens.UCSC.hg38", "BSgenome.Mmusculus.UCSC.mm39"))'
