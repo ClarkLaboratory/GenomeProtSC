@@ -71,7 +71,7 @@ make_isoform_gene_symbol_dict <- function(FLAMES_gtf, reference_gtf, output_file
 
 # The FLAMES ref can be found in your selected output folder after running the Flames pipeline. 
 FLAMES_gtf_file <- file.path(flames_dir, "isoform_annotated.gtf")
-reference_gtf_file <- "/volstorage/refs/gencode.v47.annotation.gtf" # ensure file is unzipped
+reference_gtf_file <- "/srv/shiny-server/refs/gencode.v47.annotation.gtf" # ensure file is unzipped
 output_file <- file.path(flames_dir, "isoform_gene_dict.csv")
 
 # Call the helper function defined in code block above to create a dictionary containing corresponding gene information for each isoform

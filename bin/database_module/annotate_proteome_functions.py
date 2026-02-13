@@ -1,9 +1,10 @@
 from pycdhit import cd_hit, read_clstr
 import peptides as pep
-from Bio import pairwise2
+from Bio import pairwise2 # TODO: Use Bio.Align.PairwiseAligner instead: https://biopython.org/docs/dev/Tutorial/chapter_pairwise.html#chapter-pairwise
 #from Bio.pairwise2 import format_alignment
-from Bio.SubsMat import MatrixInfo as matlist
-from Bio.pairwise2 import format_alignment
+#from Bio.SubsMat import MatrixInfo as matlist
+from Bio.Align import substitution_matrices
+#from Bio.pairwise2 import format_alignment
 
 
 
@@ -176,7 +177,7 @@ class SequenceProperties():
 class SequenceSimilarity():
   def calculate_similarity(self,seq1, seq2):
     # Use a substitution matrix like BLOSUM62
-    matrix = matlist.blosum62
+    matrix = substitution_matrices.load("BLOSUM62") # matlist.blosum62
     # Set gap open and gap extend penalties
     gap_open = -10  # Penalty for opening a gap
     gap_extend = -0.5  # Penalty for extending a gap

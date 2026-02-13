@@ -812,9 +812,9 @@ flames_server <- function(input, is_multi_sample_mode, single_sample_id, session
 
   # set genome
   if (input$organism == "human") {
-    genome_file <- "/volstorage/refs/human.fasta"
+    genome_file <- "/srv/shiny-server/refs/human.fasta"
   } else if (input$organism == "mouse") {
-    genome_file <- "/volstorage/refs/mouse.fasta"
+    genome_file <- "/srv/shiny-server/refs/mouse.fasta"
   }
 
   # process uploaded fastq files
@@ -835,9 +835,9 @@ flames_server <- function(input, is_multi_sample_mode, single_sample_id, session
 
   # Run FLAMES on the provided FASTQs
   command_run_flames <- paste0(
-    "Rscript ../../bin/database_module/flames-run.R",
+    "Rscript /srv/shiny-server/bin/database_module/flames-run.R",
     " --genome ", shQuote(genome_file),
-    " --annotation ", "/volstorage/refs/gencode.v47.annotation.gtf",
+    " --annotation ", "/srv/shiny-server/refs/gencode.v47.annotation.gtf",
     " --cell_count ", shQuote(floor(input$expected_cell_count)),
     " --ndr ", shQuote(bambu_ndr),
     " --input ", shQuote(fastq_dir),
@@ -850,7 +850,7 @@ flames_server <- function(input, is_multi_sample_mode, single_sample_id, session
   # export cell counts as files
   mode <- ifelse(is_multi_sample_mode, "multi", "single")
   command_flames_counts <- paste0(
-    "Rscript ../../bin/database_module/flames-export-counts.R",
+    "Rscript /srv/shiny-server/bin/database_module/flames-export-counts.R",
     " --directory ", shQuote(file.path(outdir_flames, "flames")),
     " --mode ", shQuote(mode),
     " --single_sample_id ", shQuote(single_sample_id)
@@ -890,9 +890,9 @@ database_server <- function(input, session) {
 
   # construct the command
   command_generate_proteome <- paste0(
-    "Rscript bin/database_module/generate_proteome.R",
+    "Rscript /srv/shiny-server/bin/database_module/generate_proteome.R",
     " --gtf ", shQuote(db_gtf_file),
-    " --reference ", "/volstorage/refs/gencode.v47.annotation.gtf",
+    " --reference ", "/srv/shiny-server/refs/gencode.v47.annotation.gtf",
     " --organism ", shQuote(input$organism),
     " --length ", shQuote(floor(input$min_orf_length)),
     " --uorfs ", shQuote(input$user_find_utr_5_orfs),
@@ -907,17 +907,17 @@ database_server <- function(input, session) {
 
   # set reference protein database per organism 
   if (input$organism == "human") {
-    ref_proteome <- "data/openprot_uniprotDb_hs.txt"
+    ref_proteome <- "/srv/shiny-server/data/openprot_uniprotDb_hs.txt"
   } else if (input$organism == "mouse") {
-    ref_proteome <- "data/openprot_uniprotDb_mm.txt"
+    ref_proteome <- "/srv/shiny-server/data/openprot_uniprotDb_mm.txt"
   }
 
   # run python script to create proteome fasta
   command_annotate_proteome <- paste0(
-    ". /miniconda3/etc/profile.d/conda.sh; ",
-    "conda activate; ",
-    "python bin/database_module/annotate_proteome.py ",
-    "/volstorage/refs/gencode.v47.annotation.gtf ", 
+    #". /miniconda3/etc/profile.d/conda.sh; ",
+    #"conda activate; ",
+    "python3 /srv/shiny-server/bin/database_module/annotate_proteome.py ",
+    "/srv/shiny-server/refs/gencode.v47.annotation.gtf ",
     shQuote(ref_proteome), " ",
     shQuote(file.path(outdir_db, "ORFome_aa.txt")), " ",
     shQuote(file.path(outdir_db, "proteome_database_transcripts.gtf")), " ",
@@ -955,7 +955,7 @@ integration_server <- function(input, output, session) {
 
   # run Rscript
   command_map_peptides <- paste0(
-    "Rscript bin/integration_module/map_peptides_generate_outputs.R",
+    "Rscript /srv/shiny-server/bin/integration_module/map_peptides_generate_outputs.R",
     " --proteomics ", shQuote(input$user_proteomics_file$datapath),
     " --fasta ", shQuote(input$user_fasta_file$datapath),
     " --metadata ", shQuote(input$user_metadata_file$datapath),
@@ -972,7 +972,7 @@ integration_server <- function(input, output, session) {
   dir.create(file.path(outdir_integ, "report_images"))
 
   # create report
-  rmarkdown::render(input = file.path(top_level_dir, "bin", "integration_module", "integration_summary_report.Rmd"),
+  rmarkdown::render(input = "/srv/shiny-server/bin/integration_module/integration_summary_report.Rmd",
                     output_file = file.path(top_level_dir, outdir_integ, "summary_report.html"),
                     output_format = "html_document",
                     params = list(

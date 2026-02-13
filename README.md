@@ -1,7 +1,5 @@
 # GenomeProtSC: an integrated proteogenomics analysis platform for long-read single-cell data
 
-## ⚠️ WARNING ⚠️: This repository is currently undergoing heavy updates and may contain code that does not fully work!
-
 ## Contents
 
 - [Installation](#installation)
@@ -19,7 +17,7 @@
   - [4. Visualization](#4-visualization-1)
 
 ## Installation
-Note: Option 1 and 2 are under development and not yet available.
+Note: Option 1 is under development and not yet available.
 
 ### Option 1 (recommended): Run the R Shiny application with Docker
 Make sure you have [Docker](https://docs.docker.com/engine/install/) installed and the application running in the background before you begin.
@@ -88,7 +86,7 @@ sudo R -e 'BiocManager::install("FLAMES")'
 sudo R -e 'install.packages(c("shiny", "shinyjs", "shinythemes", "shinydashboard", "data.table", "dplyr", "tidyr", "readr", "tibble", "purrr", "forcats", "phylotools", "markdown", "rmarkdown", "ggplot2", "ggrepel", "devtools", "optparse", "reshape2", "stringr", "stringi", "RColorBrewer", "scales", "gplots"))'
 
 # install other Bioconductor packages
-sudo R -e 'BiocManager::install(c("retracklayer", "ORFik", "GenomicAlignments", "GenomicFeatures", "GenomicRanges", "Biostrings", "mygene", "ORFik", "patchwork", "Rsamtools", "SummarizedExperiment", "tximport", "patchwork", "vsn"), ask = F)'
+sudo R -e 'BiocManager::install(c("rtracklayer", "ORFik", "GenomicAlignments", "GenomicFeatures", "GenomicRanges", "Seurat", "Biostrings", "mygene", "ORFik", "patchwork", "Rsamtools", "SummarizedExperiment", "tximport", "patchwork", "vsn"), ask = F)'
 
 # install required genomes from Bioconductor
 sudo R -e 'BiocManager::install(c("BSgenome.Hsapiens.UCSC.hg38", "BSgenome.Mmusculus.UCSC.mm39"))'
@@ -113,6 +111,10 @@ export(genomedb, "path/to/GenomeProtSC/refs/human.fasta", verbose = T, compress 
 genomedb <- BSgenome.Mmusculus.UCSC.mm39
 export(genomedb, "path/to/GenomeProtSC/refs/mouse.fasta", verbose = T, compress = F, format = "fasta")
 ```
+
+#### Add a GENCODE genome annotation GTF file:
+
+Choose a genome annotation GTF file from the GENCODE website (https://www.gencodegenes.org) and put it in the `GenomeProtSC/refs` directory. The annotation file used in the source code is `gencode.v47.annotation.gtf` from the human GENCODE v47 release (https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_47/gencode.v47.annotation.gtf.gz), but users can choose to use a different GTF file to suit their needs.
 
 #### Clone this repository:
 
